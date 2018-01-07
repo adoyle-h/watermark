@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+#
+# Filename: watermark
+# Description: Make watermarks on image
+# Author: ADoyle <adoyle.h@gmail.com>
+# LICENSE: Apache License, Version 2.0
+# First Created: 2018-01-06T15:18:34Z
+# Last Modified: 2018-01-06T15:18:34Z
+# Version: 0.1.0
+# Bash Version: 4.x
+# Source: https://github.com/adoyle-h/watermark/blob/v0.1.0/bin/watermark
+# Project: https://github.com/adoyle-h/watermark
+
+# shellcheck disable=SC1090,SC2155
+set -o errexit
+set -o errtrace
+set -o nounset
+set -o pipefail
+[[ -n "${XTRACE:+x}" ]] && set -o xtrace
+[[ -n "${DEBUG:-}" ]] && IS_DEBUG=true || IS_DEBUG=false
+
+usage() {
+cat <<EOF
+Usage: $0 [Options] <input-file> [output-file]
+
+Description:
+    Make watermarks on image.
+    The tool is based on ImageMagick and Ghostscript.
+
+Options:
+    -t, --text <text>        Set the watermarks text
+    --annotate <text>        Set the annotate text
+    -a, --author <text>      Set the author info
+    -d, --degree <number>    The transparency degree of watermarks text. Defaults to 1. Value range: [1, 100]
+    -o, --open               Open output image
+    -h, --help               Show help
+
+Parameters:
+    <input-file>             Any image
+    [output-file]            If omit, the output path will be '<same-directory>/<input-name>-covered.<input-extention>'
+EOF
+}
+
+declare -A dispatch_cmd_opts
+declare -a dispatch_cmd_args
+
+opt_parse() {
+  while [ $# -gt 0 ];do
+    case $1 in
+      -a)
+        dispatch_cmd_opts[author]=$2
+        shift
+        ;;
+      --author)
+        dispatch_cmd_opts[author]=$2
+        shift
+        ;;
+      -d)
+        dispatch_cmd_opts[degree]=$2
+        shift
+        ;;
+      --degree)
+        dispatch_cmd_opts[degree]=$2
+        shift
+        ;;
+      -t)
+        dispatch_cmd_opts[text]=$2
+        shift
+        ;;
+      --text)
+        dispatch_cmd_opts[text]=$2
+        shift
+        ;;
+      --annotate)
+        dispatch_cmd_opts[annotate]=$2
+        shift
+        ;;
+      -o)
+        dispatch_cmd_opts[open]=true
+        ;;
+      --open)
+        dispatch_cmd_opts[open]=true
+        ;;
+      -h)
+        dispatch_cmd_opts[help]=true
+        ;;
+      --help)
+        dispatch_cmd_opts[help]=true
+        ;;
+      *)
+        dispatch_cmd_args+=($1)
+        ;;
+    esac
+    shift
+  done
+
+  # declare -p dispatch_cmd_opts
+}
+
+declare input_dir_path filename extension _filename
+
+parse() {
+  local input_path=$1
+  input_dir_path=$(dirname "$input")
+  filename=$(basename "$input_path")
+  extension="${filename##*.}"
+  _filename="${filename%.*}"
+}
+
+main() {
+  opt_parse "$@"
+  local input=${dispatch_cmd_args[0]:-}
+  local outputPath=${dispatch_cmd_args[1]:-}
+
+  if [[ ${dispatch_cmd_opts[help]:-} == true ]] || [[ -z "$input" ]]; then
+    usage
+    exit 0
+  fi
+
+  if [[ ! -r $input ]]; then
+    echo "[Error] The input file is unreadable!" >&2
+    exit 1
+  fi
+
+  local degree=${dispatch_cmd_opts[degree]:-1}
+  local rotate=8
+  local rotateFlip=$((180 + "$rotate"))
+  local datetime=$(date -u "+%Y-%m-%dT%H:%M:%SZ")
+  local author=${dispatch_cmd_opts[author]:-ADoyle <adoyle.h@gmail.com>}
+  local authorTag="Author: $author"
+  local releaseTag="Released At: ${datetime}"
+  local copyright="Copyright (c) ${author}. All rights reserved."
+  local text=${dispatch_cmd_opts[text]:-"$authorTag\n${releaseTag}"}
+  local annotate=${dispatch_cmd_opts[annotate]:-"${releaseTag}\n${copyright}"}
+
+  parse "$input"
+
+  if [[ -z "$outputPath" ]]; then
+    outputPath="$input_dir_path"/"$_filename"-covered.${extension}
+  fi
+
+  local info=($(magick identify -format "%w %h" "$input"))
+  local width=${info[0]}
+  local height=${info[1]}
+  local widthUnit=$(("$width"/100))
+
+  local scale=1
+  if [[ $widthUnit -le 4 ]]; then
+    scale=1
+  elif [[ $widthUnit -gt 4 ]] && [[ $widthUnit -le 8 ]]; then
+    scale=2
+  elif [[ $widthUnit -gt 8 ]] && [[ $widthUnit -le 17 ]]; then
+    scale=4
+  elif [[ $widthUnit -gt 17 ]] && [[ $widthUnit -le 25 ]]; then
+    scale=6
+  elif [[ $widthUnit -gt 25 ]]; then
+    scale=8
+  fi
+
+  local font_size=$((10 * "$scale"))
+  local annotateSize=$((6 * "$scale"))
+  local annotateSpacing=$(("$annotateSize"/6))
+  local annotateHeight=$(("$annotateSize"*2 + 4 * "$annotateSpacing"))
+  local tileOffset=$(( "$font_size" * 2 + 4 * "$scale" ))
+  echo "[info] width=$width height=$height scale=$scale"
+
+  magick convert "$input" \
+    \( -background none -pointsize $font_size -rotate $rotate -fill white label:"$text" -write mpr:tile +delete \) \
+    \( +clone -alpha set -tile mpr:tile -draw "color 0,0 reset" -compose blend -define compose:args=$degree,100 \) \
+    -composite \
+    \( -background none -pointsize $font_size -rotate $rotateFlip -fill white label:"$text" -write mpr:tile2 +delete \) \
+    \( +clone -alpha set -tile-offset +0+${tileOffset} -tile mpr:tile2 -draw "color 0,0 reset" -compose blend -define compose:args=$degree,100 \) \
+    -composite \
+    -gravity South -background '#eae8ec' -fill '#3c3b3d' -splice 0x$annotateHeight -pointsize $annotateSize -interline-spacing $annotateSpacing -annotate +0+$annotateSpacing "${annotate}" \
+    "$outputPath"
+
+  echo "[info] Output file: $outputPath"
+
+  if [[ "${dispatch_cmd_opts[open]:-}" == true ]]; then
+    open "$outputPath"
+  fi
+}
+
+main "$@"

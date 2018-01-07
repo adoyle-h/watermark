@@ -10,10 +10,11 @@ A bash command to make watermarks on image. The tool is based on [ImageMagick][]
 - [Installation](#installation)
 - [Usage](#usage)
 - [Example](#example)
-- [Change the author info](#change-the-author-info)
-- [Change the annotate text](#change-the-annotate-text)
-- [Change watermarks text](#change-watermarks-text)
-- [Change the transparency degree of watermarks text](#change-the-transparency-degree-of-watermarks-text)
+    - [Reveal the watermarks](#reveal-the-watermarks)
+    - [Change the author info](#change-the-author-info)
+    - [Change the annotate text](#change-the-annotate-text)
+    - [Change watermarks text](#change-watermarks-text)
+    - [Change the transparency degree of watermarks text](#change-the-transparency-degree-of-watermarks-text)
 - [Versioning](#versioning)
 - [Copyright and License](#copyright-and-license)
 
@@ -39,27 +40,39 @@ Enter `watermark` for help.
 
 The origin image:
 
-![](./docs/img/origin.jpg)
+![the-origin-image](./docs/img/origin.jpg)
 
 Output:
 
-![](./docs/img/origin-covered.jpg)
+![the-covered-image](./docs/img/origin-covered.jpg)
 
-## Change the author info
+### Reveal the watermarks
+
+Adjust the color curves.
+
+Origin Covered:
+
+![the-origin-image](./docs/img/curve-origin-covered.png)
+
+Adjusted Covered:
+
+![the-covered-image](./docs/img/curve-origin-covered-2.png)
+
+### Change the author info
 
 Defaults to my contact. You should set yours.
 
 `watermark -a <your-name> <image>`
 
-## Change the annotate text
+### Change the annotate text
 
 `watermark --annotate <text> <image>` to change the whole annotate text on footer
 
-## Change watermarks text
+### Change watermarks text
 
 `watermark -t <text> <image>`
 
-## Change the transparency degree of watermarks text
+### Change the transparency degree of watermarks text
 
 `watermark -d <number> <image>`
 
